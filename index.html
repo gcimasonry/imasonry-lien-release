@@ -9,7 +9,7 @@
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Source+Sans+3:wght@300;400;500;600;700&display=swap');
 
-  :root {
+  :root {h
     --blue: #4d86bc;
     --blue-dark: #3a6a99;
     --blue-light: #6a9fce;
@@ -469,6 +469,7 @@
               <div class="spi-item"><label>Project Address</label><div class="spi-val" id="spi-addr">—</div></div>
               <div class="spi-item"><label>Customer</label><div class="spi-val" id="spi-cust">—</div></div>
               <div class="spi-item"><label>Owner</label><div class="spi-val" id="spi-own">—</div></div>
+              <div class="spi-item"><label>Job #</label><div class="spi-val" id="spi-job">—</div></div>
             </div>
           </div>
         </div>
@@ -560,6 +561,7 @@
                   <th>Project Address</th>
                   <th>Customer</th>
                   <th>Owner</th>
+                  <th>Job #</th>
                   <th>Status</th>
                   <th></th>
                 </tr>
@@ -667,6 +669,7 @@
         <div class="field span-2"><label>Project Address *</label><input type="text" id="pm-addr" placeholder="e.g. 1234 Main St, Los Angeles, CA 90001"></div>
         <div class="field"><label>Customer *</label><input type="text" id="pm-cust" placeholder="General contractor or hiring party"></div>
         <div class="field"><label>Owner *</label><input type="text" id="pm-own" placeholder="Property owner"></div>
+        <div class="field"><label>Job #</label><input type="text" id="pm-job" placeholder="e.g. 2024-087"></div>
         <div class="field"><label>Status</label>
           <select id="pm-status">
             <option value="Active">Active</option>
@@ -768,6 +771,7 @@ function openProjectModal(id = null) {
     document.getElementById('pm-own').value = p.owner || '';
     document.getElementById('pm-status').value = p.status || 'Active';
     document.getElementById('pm-notes').value = p.notes || '';
+    document.getElementById('pm-job').value = p.jobNumber || '';
   } else {
     document.getElementById('proj-modal-title').textContent = 'Add Project';
   }
@@ -782,7 +786,7 @@ function saveProject() {
   if (!name || !addr || !cust || !own) { toast('⚠️ Please fill in all required fields'); return; }
   const projects = loadProjects();
   const entry = { name, address: addr, customer: cust, owner: own,
-    status: document.getElementById('pm-status').value, notes: v('pm-notes') };
+    status: document.getElementById('pm-status').value, notes: v('pm-notes'), jobNumber: v('pm-job') };
   if (editingProjectId !== null) {
     const idx = projects.findIndex(p => p.id === editingProjectId);
     projects[idx] = { ...projects[idx], ...entry };
@@ -823,6 +827,7 @@ function renderProjectTable() {
       <td>${esc(p.address)}</td>
       <td>${esc(p.customer)}</td>
       <td>${esc(p.owner)}</td>
+      <td>${esc(p.jobNumber||'—')}</td>
       <td><span class="badge ${statusBadge(p.status||'Active')}">${esc(p.status||'Active')}</span></td>
       <td style="text-align:right;white-space:nowrap">
         <button class="btn btn-ghost btn-sm" onclick="openProjectModal(${p.id})">✏️ Edit</button>
@@ -1006,6 +1011,7 @@ function selectComboProject(id) {
   document.getElementById('spi-addr').textContent = p.address;
   document.getElementById('spi-cust').textContent = p.customer;
   document.getElementById('spi-own').textContent = p.owner;
+  document.getElementById('spi-job').textContent = p.jobNumber || '—';
   spi.classList.add('visible');
   // Auto-populate Maker of Check
   const makerEl = document.getElementById('f-maker');
