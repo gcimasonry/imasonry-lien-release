@@ -1837,6 +1837,7 @@ async function driveCreateNewFile() {
 }
 
 /* ── Pull from Drive → localStorage ── */
+/* ── Pull Drive → localStorage (hard rule: never pull if Drive has fewer projects) ── */
 async function drivePull() {
   if (!_driveToken || !_driveFileId) return;
   setSyncBar('syncing', '⏳ Pulling from Google Drive…');
@@ -1850,63 +1851,18 @@ async function drivePull() {
       throw new Error(`HTTP ${resp.status}`);
     }
     const data = await resp.json();
-    if (data.projects) {
-      // Staleness check: compare timestamps
-      const local = loadProjects();
-      const localMeta = JSON.parse(localStorage.getItem('lrg_drive_meta') || '{}');
-      const remoteMod = data.meta?.lastModified || '';
-      const localMod  = localMeta.lastModified || '';
-      if (localMod && remoteMod && localMod > remoteMod) {
-        const proceed = confirm(
-          `⚠️ Your local data appears newer than Drive (local: ${localMod.slice(0,19)}, Drive: ${remoteMod.slice(0,19)}).\n\nPull from Drive anyway? (This will overwrite your local changes.)`
-        );
-        if (!proceed) { setSyncBar('synced', `☁️ Sync cancelled — local data kept`); return; }
-      }
-      saveProjects(data.projects);
-      if (data.company) saveSettingsData(data.company);
-      localStorage.setItem('lrg_drive_meta', JSON.stringify(data.meta || {}));
-      populateProjectSelect();
-      renderRecentReleases();
-      const by = data.meta?.lastModifiedBy ? ` (last saved by ${data.meta.lastModifiedBy})` : '';
-      setSyncBar('synced', `✅ Synced from Drive${by}`);
-      toast('✅ Projects pulled from Google Drive');
-    } else {
-      throw new Error('File does not contain project data');
-    }
-  } catch(err) {
-    setSyncBar('error', '❌ Pull failed: ' + err.message);
-    toast('❌ Drive pull failed: ' + err.message);
-  }
-}
+    if (!data.projects) throw new Error('File does not contain project data');
 
-/* ── Safe auto-pull: only pulls if Drive has >= local project count ── */
-async function drivePullSafe() {
-  if (!_driveToken || !_driveFileId) return;
-  setSyncBar('syncing', '⏳ Checking Drive…');
-  try {
-    const resp = await fetch(
-      `https://www.googleapis.com/drive/v3/files/${_driveFileId}?alt=media`,
-      { headers: { Authorization: 'Bearer ' + _driveToken } }
-    );
-    if (!resp.ok) {
-      if (resp.status === 401) { _driveToken = null; updateDriveUI(); setSyncBar('error', '⚠️ Session expired — sign in again'); return; }
-      throw new Error(`HTTP ${resp.status}`);
-    }
-    const data = await resp.json();
-    if (!data.projects) { setSyncBar('synced', `☁️ Connected as ${_driveEmail}`); return; }
-
-    const localProjects = loadProjects();
     const driveCount = data.projects.length;
-    const localCount = localProjects.length;
+    const localCount = loadProjects().length;
 
-    // Safety check: don't overwrite local with a smaller Drive dataset
+    // Hard rule: project list only ever grows — never overwrite local with fewer projects
     if (driveCount < localCount) {
-      setSyncBar('error', `⚠️ Drive has ${driveCount} projects but local has ${localCount} — push local to Drive first`);
-      toast(`⚠️ Drive has fewer projects (${driveCount}) than local (${localCount}). Use ⬆️ Push to upload your data.`);
+      setSyncBar('error', `⚠️ Blocked: Drive has ${driveCount} projects, local has ${localCount} — use ⬆️ Push instead`);
+      toast(`⚠️ Pull blocked: Drive has fewer projects (${driveCount}) than local (${localCount}). Push local to Drive first.`);
       return;
     }
 
-    // Drive has equal or more projects — safe to pull
     saveProjects(data.projects);
     if (data.company) saveSettingsData(data.company);
     localStorage.setItem('lrg_drive_meta', JSON.stringify(data.meta || {}));
@@ -1914,10 +1870,15 @@ async function drivePullSafe() {
     renderRecentReleases();
     const by = data.meta?.lastModifiedBy ? ` (last saved by ${data.meta.lastModifiedBy})` : '';
     setSyncBar('synced', `✅ Synced from Drive${by} · ${driveCount} projects`);
+    toast('✅ Projects pulled from Google Drive');
   } catch(err) {
-    setSyncBar('error', '❌ Auto-sync check failed: ' + err.message);
+    setSyncBar('error', '❌ Pull failed: ' + err.message);
+    toast('❌ Drive pull failed: ' + err.message);
   }
 }
+
+// drivePullSafe is the same function — pull is always safe now
+const drivePullSafe = drivePull;
 
 /* ── Push localStorage → Drive ── */
 async function drivePush() {
