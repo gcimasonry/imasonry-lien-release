@@ -522,7 +522,7 @@
 
       <!-- Step 3: Variable Fields -->
       <div class="card no-print" id="step3-card">
-        <div class="card-header"><h2>Step 3 — Enter Release Details</h2></div>
+        <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;"><h2>Step 3 — Enter Release Details</h2><div style="display:flex;gap:8px;"><button class="btn btn-sm" onclick="showPrintTip()" style="background:#e07b00;color:#fff;font-weight:700;border:2px solid #c06a00;">🖨️ Print / Save as PDF</button><button class="btn btn-sm" onclick="resetGenerateForm()" style="background:#6b7280;color:#fff;">↺ New Release</button></div></div>
         <div class="card-body" id="step3-body">
           <div class="alert alert-info">Select a release type and project above to see the required fields.</div>
         </div>
@@ -530,12 +530,8 @@
 
       <!-- Preview toolbar (screen only) -->
       <div class="form-preview-wrapper" id="preview-wrapper" style="display:none">
-        <div class="form-preview-toolbar no-print">
-          <span id="preview-label">Form Preview</span>
-          <button class="btn btn-sm" onclick="showPrintTip()" style="background:#e07b00;color:#fff;font-weight:700;border:2px solid #c06a00;" title="Print or save this release as PDF">🖨️ Print / Save as PDF</button>
-          <button class="btn btn-sm" onclick="resetGenerateForm()" style="background:#6b7280;color:#fff;" title="Clear all fields and start a new release">↺ New Release</button>
-        </div>
         <div id="lien-form-output" class="lien-form"></div>
+      </div>/div>
       </div>
 
     </div><!-- /panel-generate -->
@@ -1903,15 +1899,24 @@ function saveProjects(arr) {
 }
 
 function showPrintTip() {
-    // Save to recent releases when user prints
+    // If no project or form type selected, bail with a toast
     const pid = getSelectedProjectId();
-    if (pid !== null && pid !== undefined && selectedFormType) {
-      const projects = loadProjects();
-      const proj = projects.find(function(p){ return p.id === pid || +p.id === +pid; });
-      if (proj) saveRecentRelease(pid, selectedFormType, proj.name);
+    if (!pid || !selectedFormType) {
+      toast('⚠️ Please select a project and release type first');
+      return;
     }
+    // Auto-generate preview if not already visible
+    const pw = document.getElementById('preview-wrapper');
+    if (!pw || pw.style.display === 'none' || !pw.style.display) {
+      renderPreview(false);
+    }
+    // Save to recent releases
+    const projects = loadProjects();
+    const proj = projects.find(function(p){ return p.id === pid || +p.id === +pid; });
+    if (proj) saveRecentRelease(pid, selectedFormType, proj.name);
+    // Show the print dialog
     const overlay = document.getElementById('print-tip-overlay');
-    overlay.style.display = 'flex';
+    if (overlay) overlay.style.display = 'flex';
   }
 </script>
 
