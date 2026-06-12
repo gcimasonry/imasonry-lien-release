@@ -1635,6 +1635,13 @@ function saveRecentRelease(projId, formType, projName) {
   // Remove any existing entry for same project+type to avoid dupes, then prepend
   const filtered = recent.filter(r => !(r.projId === projId && r.formType === formType));
   filtered.unshift({ projId, formType, projName, date: dateStr });
+  // Capture current Step 3 field values
+  var fields = {};
+  ['f-through','f-amount','f-maker','f-sigdate','f-exceptions','f-exc-amount','f-disputed'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) fields[id] = el.value;
+  });
+  if (Object.keys(fields).length > 0) filtered[0].fields = fields;
   saveRecent(filtered.slice(0, 20));
   renderRecentReleases();
 }
@@ -1663,6 +1670,17 @@ function recallRelease(projId, formType) {
   setTimeout(() => {
     selectComboProject(projId);
     // Scroll step 3 into view
+    // Restore saved field values if present
+    const entry = loadRecent().find(function(r){ return r.projId == projId && r.formType === formType; });
+    if (entry && entry.fields) {
+      setTimeout(function() {
+        Object.keys(entry.fields).forEach(function(id) {
+          var el = document.getElementById(id);
+          if (el) { el.value = entry.fields[id]; }
+        });
+        renderPreview(false);
+      }, 350);
+    }
     setTimeout(() => {
       const s3 = document.getElementById('step3-card');
       if (s3) s3.scrollIntoView({ behavior: 'smooth', block: 'start' });
