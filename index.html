@@ -1367,7 +1367,7 @@ function renderStep3() {
 
   const isConditional = selectedFormType === 'CP' || selectedFormType === 'CF';
   const isProgress    = selectedFormType === 'CP' || selectedFormType === 'UP';
-  const projId = +getSelectedProjectId();
+  const projId = getSelectedProjectId();
   const proj = loadProjects().find(p => p.id === projId);
 
   let html = '';
@@ -1430,7 +1430,7 @@ function fmtDate(val) {
 
 function renderPreview(scroll = false) {
   const projId = +getSelectedProjectId();
-  if (!projId || !selectedFormType) return;
+  if (projId === null || projId === undefined || !selectedFormType) return;
   const proj = loadProjects().find(p => p.id === projId);
   const s = loadSettings();
 
@@ -1592,8 +1592,6 @@ function renderPreview(scroll = false) {
   document.getElementById('preview-label').textContent = `Preview: ${TITLES[selectedFormType]}`;
   document.getElementById('preview-wrapper').style.display = 'block';
   if (scroll) document.getElementById('preview-wrapper').scrollIntoView({ behavior: 'smooth', block: 'start' });
-  // Save to recent releases
-  saveRecentRelease(projId, selectedFormType, proj.name);
 }
 
 /* ══════════════════════════════════════════
@@ -1905,6 +1903,13 @@ function saveProjects(arr) {
 }
 
 function showPrintTip() {
+    // Save to recent releases when user prints
+    const pid = getSelectedProjectId();
+    if (pid !== null && pid !== undefined && selectedFormType) {
+      const projects = loadProjects();
+      const proj = projects.find(function(p){ return p.id === pid || +p.id === +pid; });
+      if (proj) saveRecentRelease(pid, selectedFormType, proj.name);
+    }
     const overlay = document.getElementById('print-tip-overlay');
     overlay.style.display = 'flex';
   }
