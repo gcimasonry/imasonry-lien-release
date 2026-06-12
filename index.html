@@ -687,6 +687,9 @@
 <div id="toast"></div>
 
 <script>
+// Form type short labels
+var FORM_SHORT = { CP:'Cond. Progress', UP:'Uncond. Progress', CF:'Cond. Final', UF:'Uncond. Final' };
+
 // PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
@@ -1623,7 +1626,7 @@ function toast(msg) {
 /* ══════════════════════════════════════════
    RECENT RELEASES
 ══════════════════════════════════════════ */
-const FORM_SHORT = { CP:'Cond. Progress', UP:'Uncond. Progress', CF:'Cond. Final', UF:'Uncond. Final' };
+var FORM_SHORT = { CP:'Cond. Progress', UP:'Uncond. Progress', CF:'Cond. Final', UF:'Uncond. Final' };
 
 function saveRecentRelease(projId, formType, projName) {
   const recent = loadRecent();
