@@ -811,8 +811,14 @@ function deleteProject(id) {
 }
 function renderProjectTable() {
   const q = (document.getElementById('proj-search')?.value || '').toLowerCase();
-  const all = loadProjects();
-  const filtered = q ? all.filter(p => [p.name,p.address,p.customer,p.owner].some(x => (x||'').toLowerCase().includes(q))) : all;
+  const all = loadProjects().slice().sort((a,b) => {
+    // Recently used first, then newest job# first
+    const aTime = a.lastUsed || 0;
+    const bTime = b.lastUsed || 0;
+    if (bTime !== aTime) return bTime - aTime;
+    return (Number(b.jobNumber)||0) - (Number(a.jobNumber)||0);
+  });
+  const filtered = q ? all.filter(p => [p.name,p.address,p.customer,p.owner,String(p.jobNumber||'')].some(x => (x||'').toLowerCase().includes(q))) : all;
   document.getElementById('proj-count').textContent = `${filtered.length} of ${all.length} project${all.length!==1?'s':''}`;
   const tbody = document.getElementById('proj-tbody');
   if (!filtered.length) {
@@ -886,7 +892,7 @@ function renderComboList(query) {
   const q = (query || '').trim().toLowerCase();
   const projects = getSortedProjects(query);
   const filtered = q
-    ? projects.filter(p => p.name.toLowerCase().includes(q))
+    ? projects.filter(p => (p.name.toLowerCase().includes(q) || String(p.jobNumber||'').includes(q)))
     : projects;
 
   if (!filtered.length) {
@@ -1007,6 +1013,10 @@ function selectComboProject(id) {
   if (!p) return;
   const input = document.getElementById('project-input');
   if (input) input.value = p.name;
+  // Stamp lastUsed for sort-by-recent
+  const projects_lu = loadProjects();
+  const lu_idx = projects_lu.findIndex(x => x.id === id);
+  if (lu_idx >= 0) { projects_lu[lu_idx].lastUsed = Date.now(); saveProjects(projects_lu); }
   closeProjectDropdown();
   // Populate info panel
   const spi = document.getElementById('spi');
