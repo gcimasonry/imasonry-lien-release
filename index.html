@@ -533,6 +533,7 @@
         <div class="form-preview-toolbar no-print">
           <span id="preview-label">Form Preview</span>
           <button class="btn btn-gold btn-sm" onclick="showPrintTip()">🖨️ Print / Save as PDF</button>
+          <button class="btn btn-sm" onclick="resetGenerateForm()" style="background:#6b7280;color:#fff;" title="Clear all fields and start a new release">↺ New Release</button>
         </div>
         <div id="lien-form-output" class="lien-form"></div>
       </div>
@@ -2042,6 +2043,44 @@ async function syncJobsFromSheet() {
     toast('❌ Sync failed: ' + err.message);
     console.error('syncJobsFromSheet error:', err);
   }
+}
+
+/* ══════════════════════════════════════════
+   RESET GENERATE RELEASE FORM
+   Clears Steps 1, 2 & 3 so staff can start
+   a fresh release without reloading the page
+   ══════════════════════════════════════════ */
+function resetGenerateForm() {
+  // Step 1 — clear project selection
+  _comboSelectedId = null;
+  const input = document.getElementById('project-input');
+  if (input) input.value = '';
+  const spi = document.getElementById('spi');
+  if (spi) spi.classList.remove('visible');
+  ['spi-name','spi-addr','spi-cust','spi-own','spi-job'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = '—';
+  });
+  const list = document.getElementById('proj-combo-list');
+  if (list) { list.innerHTML = ''; list.classList.remove('open'); }
+
+  // Step 2 — clear release type selection
+  selectedFormType = null;
+  ['ft-cp','ft-up','ft-cf','ft-uf'].forEach(id => {
+    document.getElementById(id)?.classList.remove('selected');
+  });
+
+  // Step 3 — clear form fields and hide preview
+  const step3body = document.getElementById('step3-body');
+  if (step3body) step3body.innerHTML = '<div class="alert alert-info">Select a release type and project above to see the required fields.</div>';
+  const preview = document.getElementById('preview-wrapper');
+  if (preview) preview.style.display = 'none';
+  const output = document.getElementById('lien-form-output');
+  if (output) output.innerHTML = '';
+
+  // Scroll back to top
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  toast('✅ Ready for new release');
 }
 </script>
 </body>
