@@ -544,7 +544,8 @@
       <div class="card">
         <div class="card-header">
           <h2>Project Database</h2>
-          <button class="btn btn-gold btn-sm" onclick="openProjectModal()">＋ Add Project</button>
+          <button class="btn btn-sm" onclick="syncJobsFromSheet()" style="background:#27a85f;color:#fff;" title="Pull new jobs from CURRENT JOB NUMBERS sheet">🔄 Sync Jobs</button>
+        <button class="btn btn-gold btn-sm" onclick="openProjectModal()">＋ Add Project</button>
         </div>
         <div class="card-body">
           <div class="search-bar">
@@ -702,7 +703,8 @@ const DB_RECENT = 'lrg_recent_v1';
 
 /* Drive vars — declared early so saveProjects wrapper can reference them */
 const DRIVE_CLIENT_ID  = '473763293624-8k46tljsa2h25cpkstk1kr43rn02508e.apps.googleusercontent.com';
-const DRIVE_SCOPE      = 'https://www.googleapis.com/auth/drive.file';
+const DRIVE_SCOPE      = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets.readonly';
+const SHEETS_ID        = '1m47JejXQLFVxpgWWvPJ_jRWGdVwg4QRpDXkwTiey-gY';  // CURRENT JOB NUMBERS sheet
 const DRIVE_FILE_KEY   = 'lrg_drive_file_id';
 const DRIVE_TOKEN_KEY  = 'lrg_drive_token';
 const DRIVE_EMAIL_KEY  = 'lrg_drive_email';
@@ -1954,5 +1956,93 @@ function showPrintTip() {
       </div>
     </div>
   </div>
+<script>
+/* ══════════════════════════════════════════
+   GOOGLE SHEETS SYNC — CURRENT JOB NUMBERS
+   Reads "JOB #s" sheet, merges new jobs as
+   Pending stubs. Never overwrites existing.
+   ══════════════════════════════════════════ */
+async function syncJobsFromSheet() {
+  if (!_driveToken) {
+    toast('⚠️ Please sign in to Google Drive first');
+    driveSignIn();
+    return;
+  }
+
+  toast('🔄 Syncing jobs from sheet…');
+
+  try {
+    // Fetch rows from JOB #s sheet — columns B (job#), C (builder), D (project name), E (location), P (complete)
+    // Row 1 is header; data starts row 2. Get up to 2000 rows.
+    const range = encodeURIComponent("'JOB #s'!B2:P2000");
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEETS_ID}/values/${range}`;
+    const resp = await fetch(url, {
+      headers: { Authorization: 'Bearer ' + _driveToken }
+    });
+
+    if (resp.status === 401) {
+      _driveToken = null;
+      sessionStorage.removeItem(DRIVE_TOKEN_KEY);
+      toast('⚠️ Session expired — please sign in again');
+      driveSignIn();
+      return;
+    }
+    if (!resp.ok) throw new Error(`Sheets API error: HTTP ${resp.status}`);
+
+    const data = await resp.json();
+    const rows = data.values || [];
+
+    // Load existing projects and build a lookup by jobNumber
+    const projects = loadProjects();
+    const existingJobNums = new Set(
+      projects.map(p => String(p.jobNumber || '').trim()).filter(Boolean)
+    );
+
+    let added = 0;
+    const newProjects = [];
+
+    for (const row of rows) {
+      // Columns: B=job#(0), C=builder(1), D=projectName(2), E=location(3) ... P=complete(14)
+      const jobNum  = String(row[0] || '').trim();
+      const builder = String(row[1] || '').trim();
+      const name    = String(row[2] || '').trim();
+      const loc     = String(row[3] || '').trim();
+      const complete = String(row[14] || '').trim().toUpperCase();
+
+      if (!jobNum || !name) continue;           // skip blank rows
+      if (complete === 'YES') continue;          // skip completed jobs
+      if (existingJobNums.has(jobNum)) continue; // skip already-imported jobs
+
+      newProjects.push({
+        id: 'j' + jobNum + '_' + Date.now() + '_' + Math.random().toString(36).slice(2,6),
+        name: name,
+        address: '',
+        customer: builder,
+        owner: '',
+        status: 'Pending',
+        notes: loc ? 'Location: ' + loc : '',
+        jobNumber: jobNum
+      });
+      existingJobNums.add(jobNum);
+      added++;
+    }
+
+    if (added === 0) {
+      toast('✅ Already up to date — no new jobs found');
+      return;
+    }
+
+    // Append new stubs and save
+    saveProjects([...projects, ...newProjects]);
+    populateProjectSelect();
+    renderProjects?.();
+    toast(`✅ ${added} new job${added === 1 ? '' : 's'} added from sheet`);
+
+  } catch(err) {
+    toast('❌ Sync failed: ' + err.message);
+    console.error('syncJobsFromSheet error:', err);
+  }
+}
+</script>
 </body>
 </html>
