@@ -1640,7 +1640,7 @@ function saveRecentRelease(projId, formType, projName) {
   // Remove any existing entry for same project+type to avoid dupes, then prepend
   const filtered = recent.filter(r => !(r.projId === projId && r.formType === formType));
   filtered.unshift({ projId, formType, projName, date: dateStr });
-  saveRecent(filtered.slice(0, 10));
+  saveRecent(filtered.slice(0, 20));
   renderRecentReleases();
 }
 
