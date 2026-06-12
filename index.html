@@ -881,7 +881,7 @@ function populateProjectSelect() {
   if (!input) return;
   if (_comboSelectedId) {
     const p = loadProjects().find(p => p.id === _comboSelectedId);
-    if (p) input.value = p.name; else { _comboSelectedId = null; input.value = ''; }
+    if (p) input.value = p.jobNumber ? p.jobNumber + ' — ' + p.name : p.name; else { _comboSelectedId = null; input.value = ''; }
   }
   renderComboList('');
 }
@@ -902,18 +902,19 @@ function renderComboList(query) {
   }
 
   list.innerHTML = filtered.map((p, i) => {
-    let label = esc(p.name);
+    const displayName = p.jobNumber ? p.jobNumber + ' — ' + p.name : p.name;
+    let label = esc(displayName);
     if (q) {
-      // Bold the matching portion
-      const idx = p.name.toLowerCase().indexOf(q);
+      // Bold the matching portion — search in full display string
+      const idx = displayName.toLowerCase().indexOf(q);
       if (idx >= 0) {
-        label = esc(p.name.slice(0, idx))
-              + `<span class="match-highlight">${esc(p.name.slice(idx, idx + q.length))}</span>`
-              + esc(p.name.slice(idx + q.length));
+        label = esc(displayName.slice(0, idx))
+              + `<span class="match-highlight">${esc(displayName.slice(idx, idx + q.length))}</span>`
+              + esc(displayName.slice(idx + q.length));
       }
     }
     return `<div class="proj-combo-item${i === _comboActiveIdx ? ' active' : ''}"
-      data-id="${p.id}" data-name="${esc(p.name)}"
+      data-id="${p.id}" data-name="${esc(p.jobNumber ? p.jobNumber + ' — ' + p.name : p.name)}"
       onmousedown="selectComboProject(${p.id})">${label}</div>`;
   }).join('');
 }
@@ -1012,7 +1013,7 @@ function selectComboProject(id) {
   const p = loadProjects().find(p => p.id === id);
   if (!p) return;
   const input = document.getElementById('project-input');
-  if (input) input.value = p.name;
+  if (input) input.value = p.jobNumber ? p.jobNumber + ' — ' + p.name : p.name;
   // Stamp lastUsed for sort-by-recent
   const projects_lu = loadProjects();
   const lu_idx = projects_lu.findIndex(x => x.id === id);
