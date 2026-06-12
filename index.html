@@ -1109,246 +1109,266 @@ async function handlePdfUpload(file) {
 }
 
 function extractPrelimFields(rawText) {
-  // Split into clean lines, remove blanks
   const lines = rawText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-  const result = {};
+  const result = { name: null, address: null, customer: null, owner: null };
 
-  // Labels that signal the start of a NEW field (used as stop-boundaries)
-  const FIELD_LABEL = /^(project\s*name|address|customer\s*name|customer|bldg\.?\s*owner|owner\s*address|owner|general\s*contractor|contractor|lender|lendor|job\s*address|job\s*name|job\s*location|jobsite\s*name|phone|contact|email|fax|project\s*manager|superintendent|project\s*start|project\s*completion|px\/|insurance|lender\s*name|property\s*owner|contracted\s*with|mail\s*all|billing\s*address|tract\s*number|job\s*description|project\s*coordinator|project\s*accountant|project\s*engineer|assistant\s*project|thanks|re:|to:|from:|date:|no\s*of\s*pages|urgent|for\s*review|additionally\s*insured|required\s*for\s*all|initial:|exhibit)/i;
+  // ── Helpers ──────────────────────────────────────────────────
 
   function isAddrLine(l) {
     return /[A-Z]{2}\s+\d{5}/i.test(l) ||
-           /\d+\s+\w.*(street|st\.?\b|ave\.?\b|avenue|blvd\.?|boulevard|road\b|rd\.?\b|drive\b|dr\.?\b|way\b|lane\b|ln\.?\b|place\b|pl\.?\b|court\b|ct\.?\b|pkwy|parkway)/i.test(l) ||
-           /^\d+\s+[A-Za-z]/.test(l);  // bare "68 Spacial" / "621 S Catalina" style
+           /\d+\s+\w.*(street|st\.?\b|ave\.?\b|avenue|blvd\.?|boulevard|road\b|rd\.?\b|drive\b|dr\.?\b|way\b|lane\b|ln\.?\b|place\b|pl\.?\b|court\b|ct\.?\b|pkwy|parkway|hwy|highway)/i.test(l) ||
+           /^\d+\s+[A-Za-z]/.test(l);
   }
 
-  function stripLabel(line, ...pats) {
-    for (const p of pats) {
-      const m = line.match(p);
-      if (m) return (m[1] || '').trim();
+  function isCityState(l) {
+    return /,\s*[A-Z]{2}\s+\d{5}/i.test(l) || /[A-Z]{2}\s+\d{5}/i.test(l);
+  }
+
+  // Labels that signal we've moved to a new section — stop reading values
+  const SECTION_LABEL = /^(sub\s*contractor|general\s*(contractor|name)|contractor|job\s*site|job\s*(name|number|address|location)|project\s*(name|information|start|completion|manager|superintendent|coordinator|accountant|engineer)|customer\s*name|bldg\.?\s*owner|owner(\/agency)?|property\s*owner|contracted\s*(with|by)|lender|insurance|bond|surety|carrier|phone|email|fax|contact|scope|initial|exhibit|px\/|project\s*#|location:|address:|name:)/i;
+
+  // Extract value after a label colon, handling inline or next-line value
+  function extractAfterLabel(line, regex) {
+    const m = line.match(regex);
+    if (!m) return null;
+    return (m[1] || '').trim() || null; // null if blank (value may be on next line)
+  }
+
+  // Append city/state continuation line if needed
+  function appendCity(val, nextLine) {
+    if (!val) return val;
+    if (!isCityState(val) && nextLine && isCityState(nextLine)) {
+      return val + ', ' + nextLine;
     }
-    return null;
+    return val;
   }
 
-  // ── PASS 1: Standard labeled-field formats ──
+  // Clean up extracted values
+  function clean(val) {
+    if (!val) return null;
+    val = val.replace(/\s+/g, ' ')
+             .replace(/,\s*,/g, ',')
+             .replace(/^[:\-\s]+/, '')
+             .replace(/[:\-\s]+$/, '')
+             .replace(/\s*job\s*#[\w\-]+\s*$/i, '')
+             .trim();
+    return val || null;
+  }
+
+  // ── PASS 1: Labelled formats (most GCs) ──────────────────────
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+    const next1 = lines[i+1] || '';
+    const next2 = lines[i+2] || '';
 
-    // PROJECT NAME
+    // PROJECT / JOB NAME
     if (!result.name) {
-      let val = stripLabel(line,
-        /^project\s*name\s*:\s*(.*)/i,
-        /^job\s*name\s*:\s*(.*)/i,
-        /^jobsite\s*name\s*(?:and\s*address)?\s*:\s*(.*)/i
-      );
-      if (val !== null) {
-        if (!val && lines[i+1] && !FIELD_LABEL.test(lines[i+1])) { val = lines[i+1]; i++; }
-        val = val.replace(/\s*job\s*#[\w\-]+\s*$/i, '').trim();
-        if (val && isAddrLine(val)) { /* it's an address, skip for name */ }
-        else if (val) {
-          result.name = val;
-          // If this came from a "JOBSITE NAME AND ADDRESS:" line, also grab the address from
-          // the lines that follow (Montessori format): street line + city/state line
-          if (/^jobsite\s*name\s*and\s*address\s*:/i.test(line) && !result.address) {
-            const addrParts = [];
-            for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
-              const l = lines[j];
-              if (FIELD_LABEL.test(l) || /^job\s*#/i.test(l)) break;
-              addrParts.push(l);
-            }
-            const street = addrParts.find(l => /^\d+\s+\w/i.test(l));
-            const city   = addrParts.find(l => /[A-Z]{2}\s+\d{5}/i.test(l));
-            if (street && city && street !== city) result.address = street + ', ' + city;
-            else if (city)   result.address = city;
-            else if (street) result.address = street;
-          }
+      let val = extractAfterLabel(line,
+        /^project\s*name\s*:\s*(.*)/i) ??
+        extractAfterLabel(line, /^job\s*(?:site\s*)?(?:job\s*)?name\s*:\s*(.*)/i) ??
+        extractAfterLabel(line, /^jobsite\s*name\s*(?:and\s*address)?\s*:\s*(.*)/i);
+      if (val !== undefined && val !== null) {
+        if (!val && next1 && !SECTION_LABEL.test(next1) && !isAddrLine(next1)) {
+          val = next1; i++;
         }
-        continue;
+        val = clean(val);
+        if (val && !isAddrLine(val)) { result.name = val; continue; }
       }
     }
 
-    // JOB ADDRESS
+    // JOB ADDRESS (explicit label)
     if (!result.address) {
-      let val = stripLabel(line,
-        /^job\s*address\s*:\s*(.*)/i,
-        /^job\s*(?:site\s*)?location\s*:\s*(.*)/i
-      );
-      if (val !== null) {
-        if (!val && lines[i+1] && !FIELD_LABEL.test(lines[i+1])) {
-          val = lines[i+1]; i++;
+      let val = extractAfterLabel(line, /^job\s*(?:site\s*)?address\s*:\s*(.*)/i) ??
+                extractAfterLabel(line, /^job\s*location\s*:\s*(.*)/i);
+      if (val !== undefined) {
+        // Value may be blank (next line is the street)
+        if (!val && next1 && (isAddrLine(next1) || /^\d/.test(next1))) {
+          val = next1; i++;
         }
-        // Append city/state line if next line has state+zip
-        if (val && !isAddrLine(val) && i+1 < lines.length && /[A-Z]{2}\s+\d{5}/i.test(lines[i+1])) {
-          val = val + ', ' + lines[i+1]; i++;
+        if (val) {
+          // Append city/state if split to next line
+          const peek = lines[i+1] || '';
+          if (!isCityState(val) && isCityState(peek)) { val = val + ', ' + peek; i++; }
+          result.address = clean(val); continue;
         }
-        result.address = val.trim();
-        continue;
-      }
-      // "JOBSITE NAME AND ADDRESS: NAME\n ADDRESS LINE\n CITY" — Montessori format
-      if (/^jobsite\s*name\s*and\s*address\s*:/i.test(line)) {
-        // name was captured above; address is on next 1-2 lines
-        let addrParts = [];
-        for (let j = i+1; j < i+4 && j < lines.length; j++) {
-          const l = lines[j];
-          if (FIELD_LABEL.test(l) || /^job\s*#/i.test(l)) break;
-          addrParts.push(l);
-        }
-        // Find street + city/state
-        const street = addrParts.find(l => isAddrLine(l) || /^\d+\s+\w/i.test(l));
-        const city   = addrParts.find(l => /[A-Z]{2}\s+\d{5}/i.test(l));
-        if (street && city && street !== city) result.address = street + ', ' + city;
-        else if (city) result.address = city;
-        else if (street) result.address = street;
-        continue;
-      }
-      // "Address:" after project name — RD Olson style
-      if (/^address\s*:\s*(.+)/i.test(line) && result.name && !result.address) {
-        let val2 = line.replace(/^address\s*:\s*/i, '').trim();
-        if (val2 && !isAddrLine(val2) && i+1 < lines.length && /,\s*CA\s+\d{5}/i.test(lines[i+1])) {
-          val2 = val2 + ', ' + lines[i+1]; i++;
-        }
-        if (val2) { result.address = val2; continue; }
       }
     }
 
-    // CUSTOMER = General Contractor (our hiring party)
+    // PROJECT ADDRESS (R.D. Olson style — appears right after Project Name)
+    if (!result.address && result.name) {
+      const val = extractAfterLabel(line, /^address\s*:\s*(.*)/i);
+      if (val !== undefined) {
+        let addr = val || next1;
+        if (!val) i++;
+        const peek = lines[i+1] || '';
+        if (!isCityState(addr) && isCityState(peek)) { addr = addr + ', ' + peek; i++; }
+        result.address = clean(addr); continue;
+      }
+    }
+
+    // LOCATION (Trumark style)
+    if (!result.address) {
+      const val = extractAfterLabel(line, /^location\s*:\s*(.*)/i);
+      if (val !== undefined && val) {
+        let addr = val;
+        const peek = lines[i+1] || '';
+        if (!isCityState(addr) && isCityState(peek)) { addr = addr + ', ' + peek; i++; }
+        result.address = clean(addr); continue;
+      }
+    }
+
+    // CUSTOMER / GC — the party iMasonry is contracted with
     if (!result.customer) {
-      let val = stripLabel(line,
-        /^customer\s*name\s*:\s*(.*)/i,       // (.*) allows empty — value may be on next line
-        /^general\s*contractor\s*:\s*(.*)/i,
-        /^contractor\s*:\s*(.*)/i
-      );
-      if (val !== null) {
-        if (!val && lines[i+1] && !FIELD_LABEL.test(lines[i+1]) && !isAddrLine(lines[i+1])) {
-          val = lines[i+1]; i++;
+      let val = extractAfterLabel(line,
+        /^(?:general\s*)?contractor(?:\s*information)?\s*:\s*(.*)/i) ??
+        extractAfterLabel(line, /^general\s*name\s*:\s*(.*)/i) ??
+        extractAfterLabel(line, /^customer\s*name\s*:\s*(.*)/i) ??
+        extractAfterLabel(line, /^contracted\s*(?:with|by)(?:\s*information)?\s*:\s*(.*)/i) ??
+        extractAfterLabel(line, /^builder\s*:\s*(.*)/i);
+      if (val !== undefined) {
+        if (!val && next1 && !SECTION_LABEL.test(next1) && !isAddrLine(next1)) {
+          val = next1; i++;
         }
-        if (val) result.customer = val.trim();
-        continue;
+        result.customer = clean(val); continue;
       }
     }
 
-    // OWNER = Building / Property owner
+    // OWNER — property / building owner
     if (!result.owner) {
-      // First try standard labeled formats
-      let val = stripLabel(line,
-        /^(?:bldg\.?\s*)?owner(?:\s*name)?\s*:\s*(.*)/i,   // "Bldg. Owner Name: VALUE" or next line
-        /^owner\s*address\s*:\s*(.*)/i
-      );
-      if (val !== null) {
-        if (!val && lines[i+1] && !FIELD_LABEL.test(lines[i+1]) && !isAddrLine(lines[i+1])) {
-          val = lines[i+1]; i++;
+      let val = extractAfterLabel(line,
+        /^(?:property\s*)?owner(?:\/agency)?(?:\s*information)?(?:\s*name)?\s*:\s*(.*)/i) ??
+        extractAfterLabel(line, /^(?:bldg\.?\s*)?owner(?:\s*name)?\s*:\s*(.*)/i);
+      if (val !== undefined) {
+        if (!val && next1 && !SECTION_LABEL.test(next1) && !isAddrLine(next1)) {
+          val = next1; i++;
         }
-        if (val) result.owner = val.trim();
-        continue;
+        // "PROPERTY OWNER AND CONTRACTED WITH:" style
+        if (!val && /^property\s*owner\s*(?:and|&)/i.test(line)) {
+          val = next1; i++;
+        }
+        result.owner = clean(val); continue;
       }
-      // "PROPERTY OWNER & VALUE" inline — Montessori: "PROPERTY OWNER & OC MONTESSORI, LLC"
-      // Also "PROPERTY OWNER &\nCONTRACTED WITH:\n VALUE"
-      const poMatch = line.match(/^property\s*owner\s*(?:&\s*contracted\s*with\s*:?)?\s*(?:&\s*)?(.+)?/i);
-      if (poMatch) {
-        let pval = (poMatch[1] || '').trim();
-        // Strip leading "&" artifact if value starts with it
-        pval = pval.replace(/^&\s*/, '').trim();
-        if (!pval) {
-          // Try next line — may be "CONTRACTED WITH: VALUE" or just the value
-          const nxt = lines[i+1] || '';
-          const cm = nxt.match(/^contracted\s*with\s*:?\s*(.*)/i);
-          if (cm) { pval = cm[1].trim(); i++; }
-          else if (nxt && !FIELD_LABEL.test(nxt) && !isAddrLine(nxt)) { pval = nxt; i++; }
-        }
-        if (pval) { result.owner = pval.trim(); continue; }
+      // Inline "PROPERTY OWNER & LLC Name" pattern
+      const poMatch = line.match(/^property\s*owner(?:\s*(?:and|&)\s*contracted\s*with)?\s*:?\s*(.+)/i);
+      if (poMatch && poMatch[1] && !SECTION_LABEL.test(poMatch[1])) {
+        let pval = poMatch[1].replace(/^&\s*/, '').trim();
+        if (!pval && next1 && !SECTION_LABEL.test(next1)) { pval = next1; i++; }
+        result.owner = clean(pval); continue;
       }
     }
   }
 
-  // ── PASS 2: Grant-style — project name & address are the title block BEFORE "PRELIMINARY LIEN" ──
+  // ── PASS 2: KDC "Project Information:" block ──────────────────
+  // Format: "Project Information:\nKDC Job No. 25-01386\n[Project Name]\n[Address]\n[City]"
   if (!result.name || !result.address) {
-    const prelimIdx = lines.findIndex(l => /^preliminary\s*(lien|information|notice)/i.test(l));
-    if (prelimIdx > 0) {
-      // Lines immediately before prelimIdx (skip company header garbage)
-      const headerLines = [];
-      for (let i = prelimIdx - 1; i >= 0 && headerLines.length < 5; i--) {
-        const l = lines[i];
-        // Stop at company boilerplate
-        if (/phone|fax|lic\s*\d|www\.|p\.?o\.?\s*box|avenida\s*encinas|carlsbad|5051/i.test(l)) break;
-        if (/^\d{4,}/.test(l) && !isAddrLine(l)) break; // pure long numbers
-        headerLines.unshift(l);
+    const projInfoIdx = lines.findIndex(l => /^project\s*information\s*:/i.test(l));
+    if (projInfoIdx >= 0) {
+      // Lines after "Project Information:" — skip the job# line, grab name then address
+      let j = projInfoIdx + 1;
+      // Skip GC job number line (starts with company name + "Job No.")
+      if (j < lines.length && /job\s*no\.?\s*[\d\-]+/i.test(lines[j])) j++;
+      // Next non-address line = project name
+      if (!result.name && j < lines.length && !isAddrLine(lines[j]) && !isCityState(lines[j])) {
+        result.name = clean(lines[j]); j++;
       }
-      // Split into name lines vs address line
-      const nameLines   = headerLines.filter(l => !isAddrLine(l));
-      const addrLine    = headerLines.find(l => isAddrLine(l));
-      if (!result.name   && nameLines.length) result.name = nameLines.join(' ').trim();
-      if (!result.address && addrLine) {
-        // Try to append city/state from the line after addrLine in the full lines array
-        const addrIdx = lines.indexOf(addrLine);
-        const nextL = lines[addrIdx + 1] || '';
-        if (/[A-Z]{2}\s+\d{5}/i.test(nextL) && addrIdx + 1 < prelimIdx) {
-          result.address = addrLine + ', ' + nextL;
-        } else {
-          result.address = addrLine;
+      // Remaining lines = address
+      if (!result.address && j < lines.length) {
+        let addr = lines[j];
+        if (!isCityState(addr) && j+1 < lines.length && isCityState(lines[j+1])) {
+          addr = addr + ', ' + lines[j+1];
+        }
+        if (isAddrLine(addr) || isCityState(addr)) result.address = clean(addr);
+      }
+    }
+  }
+
+  // ── PASS 3: Exhibit D "JOBSITE NAME AND ADDRESS:" block ───────
+  // Format: label on left, then name + address lines to the right
+  if (!result.name || !result.address) {
+    const jsIdx = lines.findIndex(l => /^jobsite\s*name\s*and\s*address\s*:/i.test(l));
+    if (jsIdx >= 0) {
+      const block = [];
+      for (let j = jsIdx + 1; j < lines.length && j < jsIdx + 8; j++) {
+        const l = lines[j];
+        if (SECTION_LABEL.test(l) && !/^(tract|job\s*#)/i.test(l)) break;
+        if (/^(property\s*owner|general\s*contractor|lender|insurance)/i.test(l)) break;
+        block.push(l);
+      }
+      if (!result.name) {
+        const nameLine = block.find(l => !isAddrLine(l) && !/^(tract|job\s*#|jb)/i.test(l));
+        if (nameLine) result.name = clean(nameLine);
+      }
+      if (!result.address) {
+        const streetLine = block.find(l => isAddrLine(l));
+        const cityLine = block.find(l => isCityState(l));
+        if (streetLine && cityLine && streetLine !== cityLine) {
+          result.address = clean(streetLine + ', ' + cityLine);
+        } else if (streetLine) {
+          result.address = clean(streetLine);
+        } else if (cityLine) {
+          result.address = clean(cityLine);
         }
       }
     }
   }
 
-  // ── PASS 3: Toll — bare CA address line near "TRACT NUMBERS" block ──
-  if (!result.address) {
-    const tractIdx = lines.findIndex(l => /tract\s*numbers?/i.test(l));
-    if (tractIdx >= 0) {
-      for (let i = tractIdx + 1; i < Math.min(tractIdx + 10, lines.length); i++) {
-        if (isAddrLine(lines[i]) && /CA\s+\d{5}/i.test(lines[i])) {
-          result.address = lines[i]; break;
-        }
-      }
-    }
-  }
-
-  // ── PASS 4: "JOB DESCRIPTION:" for project name (Toll) ──
+  // ── PASS 4: Near-Cal title block ──────────────────────────────
+  // "PRELIMINARY INFORMATION FOR\n[PROJECT NAME]"
   if (!result.name) {
-    const jdIdx = lines.findIndex(l => /^job\s*description\s*:/i.test(l));
-    if (jdIdx >= 0) {
-      let val = lines[jdIdx].replace(/^job\s*description\s*:\s*/i, '').trim();
-      if (!val && lines[jdIdx+1]) val = lines[jdIdx+1];
-      if (val) result.name = val.split('\n')[0].trim();
+    const forIdx = lines.findIndex(l => /^preliminary\s*information\s*for$/i.test(l));
+    if (forIdx >= 0 && lines[forIdx+1]) {
+      result.name = clean(lines[forIdx+1]);
     }
   }
 
-  // ── PASS 5: "PRELIMINARY INFORMATION FOR\n[NAME]" (LA Storage) ──
+  // ── PASS 5: Hal Hays "PROJECT:" label ─────────────────────────
   if (!result.name) {
-    const forIdx = lines.findIndex(l => /preliminary\s*information\s*for/i.test(l));
-    if (forIdx >= 0 && lines[forIdx+1]) result.name = lines[forIdx+1].trim();
+    const projIdx = lines.findIndex(l => /^project\s*:/i.test(l));
+    if (projIdx >= 0) {
+      const val = extractAfterLabel(lines[projIdx], /^project\s*:\s*(.*)/i);
+      if (val) {
+        result.name = clean(val.replace(/job\s*#\s*[\d\-]+.*/i,'').trim());
+      } else if (lines[projIdx+1] && !SECTION_LABEL.test(lines[projIdx+1])) {
+        result.name = clean(lines[projIdx+1].replace(/job\s*#\s*[\d\-]+.*/i,'').trim());
+      }
+    }
   }
 
-  // ── PASS 6: ARCO fax-style — "Job Name:\n[name]\n[address]\n[city]" ──
-  // Already handled by PASS 1 Job Name label, but address follows name value
-  if (result.name && !result.address) {
-    const nameIdx = lines.findIndex(l => l === result.name);
-    if (nameIdx >= 0) {
-      const possAddr = lines[nameIdx + 1] || '';
-      const possCity = lines[nameIdx + 2] || '';
-      if (isAddrLine(possAddr) || /^\d+\s+/i.test(possAddr)) {
-        if (/[A-Z]{2}\s+\d{5}/i.test(possCity)) {
-          result.address = possAddr + ', ' + possCity;
-        } else {
-          result.address = possAddr;
+  // ── PASS 6: iMasonry table "General Name:" for customer ───────
+  if (!result.customer) {
+    const gnIdx = lines.findIndex(l => /^general\s*name\s*:/i.test(l));
+    if (gnIdx >= 0) {
+      let val = extractAfterLabel(lines[gnIdx], /^general\s*name\s*:\s*(.*)/i);
+      if (!val && lines[gnIdx+1] && !SECTION_LABEL.test(lines[gnIdx+1])) val = lines[gnIdx+1];
+      result.customer = clean(val);
+    }
+  }
+
+  // ── PASS 7: iMasonry table owner — value appears ABOVE the "Name:" label ──
+  // Pattern: value line, then "Name:" on next line, then "Address:" etc
+  // The owner value floats above its label in the PDF table layout
+  if (!result.owner) {
+    for (let i = 1; i < lines.length; i++) {
+      if (/^name\s*:$/i.test(lines[i]) && /^address\s*:$/i.test(lines[i+1] || '')) {
+        // Check if lines[i-1] looks like a company name (not a label, not an address)
+        const candidate = lines[i-1];
+        if (candidate && !SECTION_LABEL.test(candidate) && !isAddrLine(candidate) &&
+            !/^(phone|email|fax|lender|scope|initial)/i.test(candidate)) {
+          result.owner = clean(candidate);
+          break;
         }
       }
     }
   }
 
-  // ── Final cleanup ──
+  // ── Final cleanup ─────────────────────────────────────────────
   for (const key of ['name','address','customer','owner']) {
-    if (result[key]) {
-      result[key] = result[key]
-        .replace(/\s+/g,' ')
-        .replace(/,\s*,/g,',')        // remove double commas "DR.,, City" → "DR., City"
-        .replace(/^[:\-\s]+/,'')
-        .replace(/[:\-\s]+$/,'')
-        .trim();
-      if (!result[key]) delete result[key];
-    }
+    if (result[key]) result[key] = clean(result[key]);
+    if (result[key] === '') result[key] = null;
   }
+
   return result;
-}
+}}
 
 /* ══════════════════════════════════════════
    FORM TYPE SELECTION
