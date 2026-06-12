@@ -461,6 +461,7 @@
             <div class="btn-row">
               <button class="btn btn-ghost" onclick="showPanel('projects')">Manage Projects</button>
               <button class="btn btn-primary" onclick="showPanel('projects');setTimeout(()=>openProjectModal(),120)">＋ New Project</button>
+            <button class="btn btn-sm" onclick="resetGenerateForm()" style="background:#6b7280;color:#fff;" title="Clear all fields and start over">↺ New Release</button>
             </div>
           </div>
           <div class="selected-project-info" id="spi">
@@ -522,7 +523,7 @@
 
       <!-- Step 3: Variable Fields -->
       <div class="card no-print" id="step3-card">
-        <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;"><h2>Step 3 — Enter Release Details</h2><div style="display:flex;gap:8px;"><button class="btn btn-sm" onclick="showPrintTip()" style="background:#e07b00;color:#fff;font-weight:700;border:2px solid #c06a00;">🖨️ Print / Save as PDF</button><button class="btn btn-sm" onclick="resetGenerateForm()" style="background:#6b7280;color:#fff;">↺ New Release</button></div></div>
+        <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;"><h2>Step 3 — Enter Release Details</h2><button class="btn btn-sm" onclick="showPrintTip()" style="background:#e07b00;color:#fff;font-weight:700;border:2px solid #c06a00;">🖨️ Print / Save as PDF</button></div>
         <div class="card-body" id="step3-body">
           <div class="alert alert-info">Select a release type and project above to see the required fields.</div>
         </div>
