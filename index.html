@@ -1584,7 +1584,7 @@ function renderPreview(scroll = false) {
   `;
 
   document.getElementById('lien-form-output').innerHTML = html;
-  document.getElementById('preview-label').textContent = `Preview: ${TITLES[selectedFormType]}`;
+  const previewLbl = document.getElementById('preview-label'); if (previewLbl) previewLbl.textContent = `Preview: ${TITLES[selectedFormType]}`;
   document.getElementById('preview-wrapper').style.display = 'block';
   if (scroll) document.getElementById('preview-wrapper').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
