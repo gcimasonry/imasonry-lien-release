@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>iMasonry — Lien Release Generator</title>
+<title>​</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
@@ -532,7 +532,7 @@
       <div class="form-preview-wrapper" id="preview-wrapper" style="display:none">
         <div class="form-preview-toolbar no-print">
           <span id="preview-label">Form Preview</span>
-          <button class="btn btn-gold btn-sm" onclick="showPrintTip()">🖨️ Print / Save as PDF</button>
+          <button class="btn btn-sm" onclick="showPrintTip()" style="background:#e07b00;color:#fff;font-weight:700;border:2px solid #c06a00;" title="Print or save this release as PDF">🖨️ Print / Save as PDF</button>
           <button class="btn btn-sm" onclick="resetGenerateForm()" style="background:#6b7280;color:#fff;" title="Clear all fields and start a new release">↺ New Release</button>
         </div>
         <div id="lien-form-output" class="lien-form"></div>
@@ -1149,8 +1149,7 @@ function extractPrelimFields(rawText) {
     v = afterLabel(line, /^(?:general\s*)?contractor(?:\s*information)?\s*:\s*(.*)/i);
     if (v === undefined) v = afterLabel(line, /^general\s*name\s*:\s*(.*)/i);
     if (v === undefined) v = afterLabel(line, /^customer\s*name\s*:\s*(.*)/i);
-    if (v === undefined) v = afterLabel(line, /^contracted\s*(?:with|by)(?:\s*information)?\s*:\s*(.*)/i);
-    if (v === undefined) v = afterLabel(line, /^builder\s*:\s*(.*)/i);
+      if (v === undefined) v = afterLabel(line, /^builder\s*:\s*(.*)/i);
     if (v !== undefined) return {field:'customer', val:v};
     // OWNER
     v = afterLabel(line, /^(?:property\s*)?owner(?:\/agency)?(?:\s*information)?(?:\s*name)?\s*:\s*(.*)/i);
